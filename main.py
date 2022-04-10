@@ -1,12 +1,16 @@
 import cv2 # opencv library
+import time
 import numpy as np
 from os.path import isfile, join
 import matplotlib.pyplot as plt
+import urllib.request
 from VideoGet import VideoGet
 from threading import Thread
+from multiprocessing import Process
 
 cap = cv2.VideoCapture()
-vehicle_count = 0
+#Vehicle count for North, East, South, West junctions
+vehicle_count = [0,0,0,0]
 consecutive_frame = False
 consecutive_x = 0
 
@@ -46,23 +50,20 @@ def threadVideoGet(source):
                 tmp_image=frame[x*roi_height:(x+1)*roi_height, y*roi_width:(y+1)*roi_width]
                 images.append(tmp_image)
         
-        print("test")
         if (initial == False):
             for i in range(len(images)):
-                print("test")
-                processed_frames.append(traffic_detection(images[i], prev_images[i]))
-
+                processed_frames.append(traffic_detection(images[i], prev_images[i], i))
+            
+            for x in range(0, 2):
+                for y in range(0, 2):
+                    cv2.imshow(str(x*2+y+1), processed_frames[x*2+y])
+                    cv2.moveWindow(str(x*2+y+1), 100+(y*roi_width), 50+(x*roi_height))
+            #cv2.imshow("Video", frame)
         prev_images = images
-        
-        for x in range(0, 2):
-            for y in range(0, 2):
-                cv2.imshow(str(x*2+y+1), processed_frames[x*2+y])
-                cv2.moveWindow(str(x*2+y+1), 100+(y*roi_width), 50+(x*roi_height))
-        #cv2.imshow("Video", frame)
         initial = False
 
-def traffic_detection(frame, lastFrame):
-
+def traffic_detection(frame, lastFrame, camera_index):
+    global vehicle_count, consecutive_frame, consecutive_x
     cntr_found = False
     # frame differencing
     grayA = cv2.cvtColor(lastFrame, cv2.COLOR_BGR2GRAY)
@@ -89,39 +90,36 @@ def traffic_detection(frame, lastFrame):
                 consecutive_frame = False
                 consecutive_x = 0
                 break
-            print(cv2.contourArea(cntr))
             valid_cntrs.append(cntr)
-            vehicle_count += 1
+            vehicle_count[camera_index] += 1
             cntr_found = True
             consecutive_x = x
+            print("Vehicle Registered" + str(vehicle_count[camera_index]))
 
     if cntr_found == True:
         consecutive_frame = True
     else:
         consecutive_frame = False
-    print("next frame" , cntr_found)
     # add contours to original frames
     img = frame.copy()
     cv2.drawContours(img, valid_cntrs, -1, (127,200,0), 2)
-    
-    cv2.putText(img, "vehicles: " + str(vehicle_count), (55, 15), font, 0.6, (0, 180, 0), 2)
-    cv2.line(img, (0, 90),(256,90),(100, 255, 255))
+    cv2.putText(img, "vehicles: " + str(vehicle_count[camera_index]) , (55, 15), font, 0.6, (0, 180, 0), 2)
+    cv2.line(img, (0, 90),(360,90),(100, 255, 255))
     return(img)
     #cv2.imwrite(pathIn+str(i)+'.png',img)  
 
 def thingspeak_write():
-    pass
-
-def traffic_monitor():
-    #Begin image detection
-    threadVideoGet(0)
-    #Thread(target=threadVideoGet(0), args=()).start()
-
-    #Create another thread with timed loop for uploading data to Thingspeak
-
+    global vehicle_count
+    baseURL = 'http://api.thingspeak.com/update?api_key=VABJUOTZUVODJY3W&'
+    while True:
+        b=urllib.request.urlopen(baseURL + "field1="+str(vehicle_count[0])+"&field2="+str(vehicle_count[1])+"&field3="+str(vehicle_count[2])+"&field4="+str(vehicle_count[3]))      
+        time.sleep(20)
 
 if __name__ == "__main__":
-    traffic_monitor()
+    p2 = Process(target = thingspeak_write)
+    p2.start()
+    p1 = Process(target = threadVideoGet(0))
+    p1.start()
     cap.release()
     cv2.destroyAllWindows()
 
