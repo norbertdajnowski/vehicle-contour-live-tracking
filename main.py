@@ -7,6 +7,7 @@ import urllib.request
 from VideoGet import VideoGet
 from threading import Thread
 from multiprocessing import Process
+from queue import Queue
 
 cap = cv2.VideoCapture()
 #Vehicle count for North, East, South, West junctions
@@ -19,19 +20,22 @@ prev_images = []
 
 # kernel for image dilation
 kernel = np.ones((4,4),np.uint8)
+count_i = 0
 
 # font style
 font = cv2.FONT_HERSHEY_SIMPLEX
 
-def threadVideoGet(source):
+def threadVideoGet(source, q):
     """
     Dedicated thread for grabbing video frames with VideoGet object.
     Main thread shows video frames.
     """
+    global count_i
     video_getter = VideoGet(source).start()
     initial = True
 
     while True:
+
         processed_frames = []
         if (cv2.waitKey(1) == ord("q")) or video_getter.stopped:
             video_getter.stop()
@@ -65,6 +69,7 @@ def threadVideoGet(source):
 def traffic_detection(frame, lastFrame, camera_index):
     global vehicle_count, consecutive_frame, consecutive_x
     cntr_found = False
+
     # frame differencing
     grayA = cv2.cvtColor(lastFrame, cv2.COLOR_BGR2GRAY)
     grayB = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -95,6 +100,7 @@ def traffic_detection(frame, lastFrame, camera_index):
             cntr_found = True
             consecutive_x = x
             print("Vehicle Registered" + str(vehicle_count[camera_index]))
+            q.put(vehicle_count)
 
     if cntr_found == True:
         consecutive_frame = True
@@ -108,18 +114,21 @@ def traffic_detection(frame, lastFrame, camera_index):
     return(img)
     #cv2.imwrite(pathIn+str(i)+'.png',img)  
 
-def thingspeak_write():
-    global vehicle_count
+def thingspeak_write(name, q):
+    vehicle_count = q.get()
     baseURL = 'http://api.thingspeak.com/update?api_key=VABJUOTZUVODJY3W&'
     while True:
         b=urllib.request.urlopen(baseURL + "field1="+str(vehicle_count[0])+"&field2="+str(vehicle_count[1])+"&field3="+str(vehicle_count[2])+"&field4="+str(vehicle_count[3]))      
-        time.sleep(20)
+        print(vehicle_count)
 
 if __name__ == "__main__":
-    p2 = Process(target = thingspeak_write)
-    p2.start()
-    p1 = Process(target = threadVideoGet(0))
-    p1.start()
+    q = Queue()
+    t1 = Thread(target = thingspeak_write, args=("Thread-1", q))
+    t2 = Thread(target = threadVideoGet, args=(0, q))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
     cap.release()
     cv2.destroyAllWindows()
 
