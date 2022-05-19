@@ -116,7 +116,7 @@ def traffic_detection(frame, lastFrame, camera_index):
 
 def thingspeak_write(name, q):
     vehicle_count = q.get()
-    baseURL = 'http://api.thingspeak.com/update?api_key=VABJUOTZUVODJY3W&'
+    baseURL = 'http://api.thingspeak.com/update?api_key=W&'
     while True:
         b=urllib.request.urlopen(baseURL + "field1="+str(vehicle_count[0])+"&field2="+str(vehicle_count[1])+"&field3="+str(vehicle_count[2])+"&field4="+str(vehicle_count[3]))      
         print(vehicle_count)
